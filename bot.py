@@ -25,7 +25,7 @@ app = Flask(__name__)
 def home(): return "Telegram Bot is Alive ✅", 200
 def run_flask(): app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 
 def empty_db(): return {"history": {}, "reply_map": {}, "blocked": [], "msg_map": {}, "stealth": False, "alerts": [], "selected_user": None}
 
@@ -125,7 +125,7 @@ def direct_msg(message):
         add_history(data, user_id, admin_message_id=sent.message_id); save_data(data)
         bot.send_message(ADMIN_ID, f"✅ Message bhej diya <code>{user_id}</code> ko")
     except Exception as e:
-        bot.send_message(ADMIN_ID, f"❌ Error: {e}\n<b>Solution:</b> User ko ye link bhej: https://t.me/{bot.get_me().username}?start={user_id}\nJab wo 1 baar /start karega tab direct msg chalne lagega.")
+        bot.send_message(ADMIN_ID, f"❌ Error: {e}\n<b>Solution:</b> User ko ye link bhej: https://t.me/{bot.get_me().username}?start={user_id}")
 
 @bot.message_handler(commands=["clearall"])
 def clearall(message):
@@ -133,14 +133,13 @@ def clearall(message):
     data = load_data(); count = 0
     for user_id in list(data["history"].keys()):
         history = data["history"][user_id]
-        # SIRF ADMIN KE MSG DELETE
         for msg_id in history.get("a", []):
             try: bot.delete_message(int(user_id), int(msg_id)); count+=1
             except: pass
         for msg_id in history.get("a", []):
             try: bot.delete_message(ADMIN_ID, int(msg_id))
             except: pass
-        data["history"][user_id]["a"] = [] # admin wale khaali
+        data["history"][user_id]["a"] = []
     save_data(data); bot.send_message(ADMIN_ID, f"🧹 Admin ke {count} messages user se delete kiye gaye.")
 
 @bot.message_handler(commands=["allclear"])
@@ -250,20 +249,16 @@ def handle_message(message):
 def edit_handler(message):
     chat_id = message.chat.id; message_id = message.message_id; data = load_data()
 
-    # ADMIN EDIT
     if chat_id == ADMIN_ID:
         admin_msg_id = str(message_id)
         if admin_msg_id in data["msg_map"]:
             info = data["msg_map"][admin_msg_id]
             try: bot.edit_message_text(message.text, info["user"], info["user_msg"])
             except: pass
-
-    # USER EDIT
     else:
         user_id = str(chat_id)
         for uid, hist in data["history"].items():
             if message_id in hist.get("u", []):
-                # admin wale msg ka id dhund
                 for admin_msg_id, map_info in data["msg_map"].items():
                     if map_info["user"] == int(user_id) and map_info["user_msg"] == message_id:
                         try: bot.edit_message_text(message.text, ADMIN_ID, int(admin_msg_id))
@@ -273,7 +268,9 @@ def edit_handler(message):
 def start_services():
     threading.Thread(target=run_flask, daemon=True).start()
     threading.Thread(target=auto_delete_worker, daemon=True).start()
-    bot.infinity_polling(skip_pending=True, drop_pending=True, timeout=30)
+    logging.info("Bot starting...")
+    # FIX: drop_pending hata diya
+    bot.infinity_polling(skip_pending=True, timeout=30, long_polling_timeout=30)
 
 if __name__ == "__main__":
     try: start_services()
