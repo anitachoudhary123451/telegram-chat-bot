@@ -33,7 +33,7 @@ def run_flask():
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 
 def empty_db():
-    return {"history": {}, "reply_map": {}, "blocked": [], "msg_map": {}, "stealth": False, "alerts": []}
+    return {"history": {}, "reply_map": {}, "blocked": [], "msg_map": {}, "stealth": False, "alerts": [], "selected_user": None}
 
 def load_data():
     with db_lock:
@@ -45,9 +45,8 @@ def load_data():
             for key in ["history", "reply_map", "msg_map", "blocked", "alerts"]:
                 data.setdefault(key, {} if key in ["history","reply_map","msg_map"] else [])
             data.setdefault("stealth", False)
+            data.setdefault("selected_user", None)
             for uid in data["history"]:
-                data["history"][uid].setdefault("name", "Unknown")
-                data["history"][uid].setdefault("username", "N/A")
                 data["history"][uid].setdefault("u", [])
                 data["history"][uid].setdefault("a", [])
             return data
@@ -68,13 +67,11 @@ def save_data(data):
 def ensure_user(data, user_id):
     user_id = str(user_id)
     if user_id not in data["history"]:
-        data["history"][user_id] = {"u": [], "a": [], "name": "Unknown", "username": "N/A"}
+        data["history"][user_id] = {"u": [], "a": []}
 
-def add_history(data, user_id, user_message_id=None, admin_message_id=None, admin_msg_id=None, name="Unknown", username="N/A"):
+def add_history(data, user_id, user_message_id=None, admin_message_id=None, admin_msg_id=None):
     user_id = str(user_id)
     ensure_user(data, user_id)
-    data["history"][user_id]["name"] = name
-    data["history"][user_id]["username"] = username
     if user_message_id is not None:
         data["history"][user_id]["u"].append(int(user_message_id))
     if admin_message_id is not None:
@@ -106,17 +103,20 @@ def start(message):
     chat_id = message.chat.id
     data = load_data()
     if chat_id == ADMIN_ID:
+        selected = f"<code>{data['selected_user']}</code>" if data['selected_user'] else "Koi nahi"
         stealth_status = "🟢 ON" if data["stealth"] else "🔴 OFF"
         alert_count = len(data["alerts"])
         panel = f"""🛡️ <b>ADMIN CONTROL PANEL</b>
 
-↩️ <b>Reply</b> karke user ko jawab do
+🎯 <b>Selected User:</b> {selected}
 🕵️ <b>Stealth:</b> {stealth_status}
 🚨 <b>Active Alerts:</b> {alert_count}
 
 <b>COMMANDS:</b>
 👥 /users - Saare users
-📨 /msg &lt;id&gt; &lt;text&gt; - Direct msg
+📨 /dm &lt;id&gt; &lt;text&gt; - Kisi ko bhi direct msg
+🎯 /select &lt;id&gt; - Chat mode ON
+🎯 /unselect - Chat mode OFF
 🚫 /blocked - Blocked list
 ⛔ /ban &lt;id&gt; - Ban user
 ✅ /unban &lt;id&gt; - Unban user
@@ -137,13 +137,7 @@ def start(message):
         except: pass
         return
 
-    name = message.from_user.first_name or "No Name"
-    username = f"@{message.from_user.username}" if message.from_user.username else "N/A"
-    ensure_user(data, chat_id)
-    data["history"][user_id]["name"] = name
-    data["history"][user_id]["username"] = username
-
-    welcome = f"""<b>✨ Swaagat hai {name}!</b>
+    welcome = f"""<b>✨ Swaagat hai!</b>
 
 Aapka sandesh surakshit roop se hamare team tak pahucha diya gaya hai.
 Humein aapse jald hi sampark kiya jayega.
@@ -153,10 +147,40 @@ Dhanyavaad 🙏"""
 
     time_now = datetime.now().strftime("%d-%m-%Y %H:%M")
     alert_text = " 🚨 <b>VIP ALERT</b>" if user_id in data["alerts"] else ""
-    admin_msg = bot.send_message(ADMIN_ID, f"🔔 <b>NEW MESSAGE</b>{alert_text}\n\n👤 <b>Name:</b> {name}\n🆔 <b>ID:</b> <code>{chat_id}</code>\n👤 <b>Username:</b> {username}\n🕐 <b>Time:</b> {time_now}")
+    admin_msg = bot.send_message(ADMIN_ID, f"🔔 <b>NEW MESSAGE</b>{alert_text}\n\n🆔 <b>From:</b> <code>{chat_id}</code>\n🕐 <b>Time:</b> {time_now}")
 
     data["reply_map"][str(admin_msg.message_id)] = str(chat_id)
     save_data(data)
+
+@bot.message_handler(commands=["select"])
+def select_user(message):
+    if message.chat.id!= ADMIN_ID: return
+    try: user_id = message.text.split()[1]
+    except: bot.send_message(ADMIN_ID, "⚠️ Use: <code>/select &lt;user_id&gt;</code>"); return
+    data = load_data()
+    data["selected_user"] = user_id
+    save_data(data)
+    bot.send_message(ADMIN_ID, f"🎯 <b>Chat Mode ON</b>\nAb jo bhi type karoge wo <code>{user_id}</code> ko jayega.")
+
+@bot.message_handler(commands=["unselect"])
+def unselect_user(message):
+    if message.chat.id!= ADMIN_ID: return
+    data = load_data()
+    data["selected_user"] = None
+    save_data(data)
+    bot.send_message(ADMIN_ID, "🎯 <b>Chat Mode OFF</b>\nAb normal mode.")
+
+@bot.message_handler(commands=["dm"])
+def direct_msg(message):
+    if message.chat.id!= ADMIN_ID: return
+    try: parts = message.text.split(" ", 2); user_id = parts[1]; text = parts[2]
+    except: bot.send_message(ADMIN_ID, "⚠️ Use: <code>/dm &lt;chat_id&gt; &lt;text&gt;</code>"); return
+    data = load_data()
+    try:
+        sent = bot.send_message(int(user_id), text)
+        add_history(data, user_id, admin_message_id=sent.message_id)
+        save_data(data); bot.send_message(ADMIN_ID, f"✅ Direct message bhej diya <code>{user_id}</code> ko")
+    except Exception as e: bot.send_message(ADMIN_ID, f"❌ Error: {e}\nNote: User ne bot ko block kiya hua ho sakta hai.")
 
 @bot.message_handler(commands=["allclear"])
 def all_clear(message):
@@ -213,13 +237,13 @@ def delete_user(message):
 def stealth_on(message):
     if message.chat.id!= ADMIN_ID: return
     data = load_data(); data["stealth"] = True; save_data(data)
-    bot.send_message(ADMIN_ID, "🕵️ <b>Stealth Mode ON</b>\nAb reply anonymous jayenge.")
+    bot.send_message(ADMIN_ID, "🕵️ <b>Stealth Mode ON</b>")
 
 @bot.message_handler(commands=["stealthoff"])
 def stealth_off(message):
     if message.chat.id!= ADMIN_ID: return
     data = load_data(); data["stealth"] = False; save_data(data)
-    bot.send_message(ADMIN_ID, "🔴 <b>Stealth Mode OFF</b>\nAb normal copy reply jayega.")
+    bot.send_message(ADMIN_ID, "🔴 <b>Stealth Mode OFF</b>")
 
 @bot.message_handler(commands=["users"])
 def users(message):
@@ -228,9 +252,8 @@ def users(message):
     if not users_list: bot.send_message(ADMIN_ID, "👥 Koi user nahi hai."); return
     text = "<b>👥 SAVED USERS</b>\n\n"
     for i, user_id in enumerate(users_list, 1):
-        name = data["history"][user_id].get("name", "Unknown")
         status = "⛔" if user_id in data["blocked"] else "🚨" if user_id in data["alerts"] else "✅"
-        text += f"{i}. {status} <b>{name}</b>\n🆔 <code>{user_id}</code>\n\n"
+        text += f"{i}. {status} 🆔 <code>{user_id}</code>\n\n"
     bot.send_message(ADMIN_ID, text)
 
 @bot.message_handler(commands=["blocked"])
@@ -240,8 +263,7 @@ def blocked(message):
     if not data["blocked"]: bot.send_message(ADMIN_ID, "🚫 Koi blocked user nahi hai."); return
     text = "<b>🚫 BLOCKED USERS</b>\n"
     for i, user_id in enumerate(data["blocked"], 1):
-        name = data["history"].get(user_id, {}).get("name", "Unknown")
-        text += f"{i}. <b>{name}</b>\n🆔 <code>{user_id}</code>\n\n"
+        text += f"{i}. 🆔 <code>{user_id}</code>\n\n"
     bot.send_message(ADMIN_ID, text)
 
 @bot.message_handler(commands=["ban"])
@@ -268,18 +290,6 @@ def unban(message):
         bot.send_message(ADMIN_ID, f"✅ User <code>{user_id}</code> unban.")
     else: bot.send_message(ADMIN_ID, "⚠️ User banned nahi hai.")
 
-@bot.message_handler(commands=["msg"])
-def send_msg(message):
-    if message.chat.id!= ADMIN_ID: return
-    try: parts = message.text.split(" ", 2); user_id = parts[1]; text = parts[2]
-    except: bot.send_message(ADMIN_ID, "⚠️ Use: <code>/msg &lt;user_id&gt; &lt;text&gt;</code>"); return
-    data = load_data()
-    try:
-        sent = bot.send_message(int(user_id), text)
-        add_history(data, user_id, admin_message_id=sent.message_id)
-        save_data(data); bot.send_message(ADMIN_ID, f"✅ Message bhej diya <code>{user_id}</code> ko")
-    except Exception as e: bot.send_message(ADMIN_ID, f"❌ Error: {e}")
-
 @bot.message_handler(commands=["clearall"])
 def clearall(message):
     if message.chat.id!= ADMIN_ID: return
@@ -301,40 +311,54 @@ SUPPORTED_TYPES = ["text","photo","video","document","audio","voice","sticker","
 def handle_message(message):
     chat_id = message.chat.id; message_id = message.message_id; data = load_data()
 
+    # ADMIN SECTION
     if chat_id == ADMIN_ID:
+        # 1. SELECTED CHAT MODE
+        if data["selected_user"] and not message.reply_to_message:
+            target_user = data["selected_user"]
+            try:
+                sent = bot.copy_message(chat_id=int(target_user), from_chat_id=ADMIN_ID, message_id=message_id)
+                add_history(data, target_user, admin_message_id=sent.message_id)
+                save_data(data)
+            except Exception as e: bot.send_message(ADMIN_ID, f"❌ Error: {e}")
+            return
+
+        # 2. NORMAL REPLY MODE
         if not message.reply_to_message:
-            bot.send_message(ADMIN_ID, "⚠️ User ke message par Reply karke jawab bheje."); return
+            bot.send_message(ADMIN_ID, "⚠️ Reply karke bheje ya pehle /select &lt;id&gt; kare"); return
 
         target_user = data["reply_map"].get(str(message.reply_to_message.message_id))
         if not target_user: bot.send_message(ADMIN_ID, "❌ Ye message kisi saved user ka nahi hai."); return
         if target_user in data["blocked"]: bot.send_message(ADMIN_ID, "⛔ Ye user blocked hai."); return
 
         try:
-            sent = bot.copy_message(chat_id=int(target_user), from_chat_id=ADMIN_ID, message_id=message_id)
+            sent = bot.copy_message(chat_id=int(target_user), from_chat_id=ADMIN_ID, message_id=message_id, reply_to_message_id=int(data["msg_map"].get(str(message.reply_to_message.message_id),{}).get("user_msg",0)))
             add_history(data, target_user, admin_message_id=sent.message_id, admin_msg_id=message_id)
             save_data(data)
         except Exception as e:
             logging.error(f"Admin → User error: {e}"); bot.send_message(ADMIN_ID, f"❌ Error:\n{e}")
         return
 
+    # USER SECTION
     user_id = str(chat_id)
     if user_id in data["blocked"]:
         try: bot.delete_message(chat_id, message_id)
         except: pass
         return
 
-    name = message.from_user.first_name or "No Name"
-    username = f"@{message.from_user.username}" if message.from_user.username else "N/A"
     try:
         ensure_user(data, user_id)
+        reply_to = None
+        if message.reply_to_message:
+            reply_to = data["msg_map"].get(str(message.reply_to_message.message_id),{}).get("admin_msg_id")
 
-        copied = bot.copy_message(chat_id=ADMIN_ID, from_chat_id=chat_id, message_id=message_id)
+        copied = bot.copy_message(chat_id=ADMIN_ID, from_chat_id=chat_id, message_id=message_id, reply_to_message_id=reply_to)
         admin_message_id = copied.message_id
         data["reply_map"][str(admin_message_id)] = user_id
 
-        bot.send_message(ADMIN_ID, f"👤 <b>From:</b> {name} | 🆔 <code>{user_id}</code>", reply_to_message_id=admin_message_id)
+        bot.send_message(ADMIN_ID, f"🆔 <b>From:</b> <code>{user_id}</code>", reply_to_message_id=admin_message_id)
 
-        add_history(data, user_id, user_message_id=message_id, admin_message_id=admin_message_id, name=name, username=username)
+        add_history(data, user_id, user_message_id=message_id, admin_message_id=admin_message_id)
         save_data(data)
     except Exception as e: logging.error(f"User → Admin error: {e}")
 
