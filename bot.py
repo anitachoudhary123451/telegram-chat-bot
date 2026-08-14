@@ -7,7 +7,7 @@ import telebot
 
 # Environment Variables
 TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "8940270305"))  # Apna Admin ID set karein
+ADMIN_ID = int(os.getenv("ADMIN_ID")
 USERS_FILE = "registered_users.json"
 
 if not TOKEN:
