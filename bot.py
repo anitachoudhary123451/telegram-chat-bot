@@ -7,7 +7,6 @@ from threading import Lock
 from flask import Flask
 import telebot
 
-
 # ============================================================
 # ENVIRONMENT & CONFIGURATION
 # ============================================================
@@ -29,14 +28,12 @@ try:
 except ValueError:
     raise RuntimeError("ADMIN_ID must be a valid integer!")
 
-
 bot = telebot.TeleBot(
     TOKEN,
     parse_mode="HTML"
 )
 
 db_lock = Lock()
-
 
 # ============================================================
 # LOGGING
@@ -47,25 +44,21 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s"
 )
 
-
 # ============================================================
 # WEB SERVER / KEEP ALIVE
 # ============================================================
 
 app = Flask(__name__)
 
-
 @app.route("/")
 def home():
     return "⚡ Gateway Service Active ✅", 200
-
 
 def run_flask():
     app.run(
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 10000))
     )
-
 
 # ============================================================
 # DATABASE CORE
@@ -82,7 +75,6 @@ def empty_db():
         "selected_user": None
     }
 
-
 def ensure_user(data, user_id):
     user_id = str(user_id)
 
@@ -92,11 +84,9 @@ def ensure_user(data, user_id):
             "user_msgs": []
         }
 
-
 def ensure_protected_user(data):
     if PROTECTED_USER_ID:
         ensure_user(data, PROTECTED_USER_ID)
-
 
 def load_data():
     with db_lock:
@@ -157,7 +147,6 @@ def load_data():
 
             return data
 
-
 def save_data(data):
 
     with db_lock:
@@ -191,7 +180,6 @@ def save_data(data):
                 e
             )
 
-
 SUPPORTED_TYPES = [
     "text",
     "photo",
@@ -202,7 +190,6 @@ SUPPORTED_TYPES = [
     "sticker",
     "animation"
 ]
-
 
 # ============================================================
 # START COMMAND
@@ -290,7 +277,6 @@ def handle_start(message):
 
         return
 
-
     # ========================================================
     # USER
     # ========================================================
@@ -324,9 +310,9 @@ Hamaari team aapse isi chat me connect karegi.
 
     bot.send_message(
         chat_id,
-        welcome_text
+        welcome_text,
+        protect_content=True
     )
-
 
 # ============================================================
 # SELECT
@@ -335,7 +321,7 @@ Hamaari team aapse isi chat me connect karegi.
 @bot.message_handler(commands=["select"])
 def select_user(message):
 
-    if message.chat.id != ADMIN_ID:
+    if message.chat.id!= ADMIN_ID:
         return
 
     try:
@@ -368,7 +354,6 @@ def select_user(message):
         f"<code>{user_id}</code>"
     )
 
-
 # ============================================================
 # UNSELECT
 # ============================================================
@@ -376,7 +361,7 @@ def select_user(message):
 @bot.message_handler(commands=["unselect"])
 def unselect_user(message):
 
-    if message.chat.id != ADMIN_ID:
+    if message.chat.id!= ADMIN_ID:
         return
 
     data = load_data()
@@ -391,7 +376,6 @@ def unselect_user(message):
         "Manual/Reply mode active."
     )
 
-
 # ============================================================
 # DM
 # ============================================================
@@ -399,7 +383,7 @@ def unselect_user(message):
 @bot.message_handler(commands=["dm"])
 def direct_message(message):
 
-    if message.chat.id != ADMIN_ID:
+    if message.chat.id!= ADMIN_ID:
         return
 
     try:
@@ -440,7 +424,8 @@ def direct_message(message):
 
         sent = bot.send_message(
             int(user_id),
-            text
+            text,
+            protect_content=True
         )
 
         ensure_user(
@@ -486,7 +471,6 @@ def direct_message(message):
             "❌ <b>Delivery failed.</b>"
         )
 
-
 # ============================================================
 # CLEAR ALL ADMIN MESSAGES
 # ============================================================
@@ -494,7 +478,7 @@ def direct_message(message):
 @bot.message_handler(commands=["clearall"])
 def clear_admin_messages(message):
 
-    if message.chat.id != ADMIN_ID:
+    if message.chat.id!= ADMIN_ID:
         return
 
     try:
@@ -568,7 +552,6 @@ def clear_admin_messages(message):
         f"<code>{user_id}</code>'s chat."
     )
 
-
 # ============================================================
 # PURGE
 # ============================================================
@@ -576,7 +559,7 @@ def clear_admin_messages(message):
 @bot.message_handler(commands=["purge"])
 def purge_chat(message):
 
-    if message.chat.id != ADMIN_ID:
+    if message.chat.id!= ADMIN_ID:
         return
 
     try:
@@ -736,7 +719,6 @@ def purge_chat(message):
         f"🧹 Routing mappings cleared."
     )
 
-
 # ============================================================
 # RESET DATABASE
 # ============================================================
@@ -744,7 +726,7 @@ def purge_chat(message):
 @bot.message_handler(commands=["resetdb"])
 def reset_database(message):
 
-    if message.chat.id != ADMIN_ID:
+    if message.chat.id!= ADMIN_ID:
         return
 
     data = empty_db()
@@ -761,7 +743,6 @@ def reset_database(message):
         "All state logs and mappings cleared."
     )
 
-
 # ============================================================
 # USERS
 # ============================================================
@@ -769,7 +750,7 @@ def reset_database(message):
 @bot.message_handler(commands=["users"])
 def list_users(message):
 
-    if message.chat.id != ADMIN_ID:
+    if message.chat.id!= ADMIN_ID:
         return
 
     data = load_data()
@@ -820,7 +801,6 @@ def list_users(message):
         text
     )
 
-
 # ============================================================
 # BAN
 # ============================================================
@@ -828,7 +808,7 @@ def list_users(message):
 @bot.message_handler(commands=["ban"])
 def ban_user(message):
 
-    if message.chat.id != ADMIN_ID:
+    if message.chat.id!= ADMIN_ID:
         return
 
     try:
@@ -871,7 +851,6 @@ def ban_user(message):
             "⚠️ User is already blocked."
         )
 
-
 # ============================================================
 # UNBAN
 # ============================================================
@@ -879,7 +858,7 @@ def ban_user(message):
 @bot.message_handler(commands=["unban"])
 def unban_user(message):
 
-    if message.chat.id != ADMIN_ID:
+    if message.chat.id!= ADMIN_ID:
         return
 
     try:
@@ -922,7 +901,6 @@ def unban_user(message):
             "⚠️ User is not blocked."
         )
 
-
 # ============================================================
 # ALERT
 # ============================================================
@@ -930,7 +908,7 @@ def unban_user(message):
 @bot.message_handler(commands=["alert"])
 def toggle_alert(message):
 
-    if message.chat.id != ADMIN_ID:
+    if message.chat.id!= ADMIN_ID:
         return
 
     try:
@@ -979,7 +957,6 @@ def toggle_alert(message):
             f"<code>{user_id}</code>."
         )
 
-
 # ============================================================
 # USER PROFILE
 # ============================================================
@@ -987,7 +964,7 @@ def toggle_alert(message):
 @bot.message_handler(commands=["userprofile"])
 def user_profile(message):
 
-    if message.chat.id != ADMIN_ID:
+    if message.chat.id!= ADMIN_ID:
         return
 
     parts = message.text.split(
@@ -1082,7 +1059,6 @@ def user_profile(message):
         disable_web_page_preview=True
     )
 
-
 # ============================================================
 # CORE ROUTING ENGINE
 # ============================================================
@@ -1097,7 +1073,6 @@ def handle_all_messages(message):
     message_id = message.message_id
 
     data = load_data()
-
 
     # ========================================================
     # ADMIN -> USER
@@ -1178,7 +1153,8 @@ def handle_all_messages(message):
             args = {
                 "chat_id": int(target_user),
                 "from_chat_id": ADMIN_ID,
-                "message_id": message_id
+                "message_id": message_id,
+                "protect_content": True # 🔒 No Forward, No Save, No Screenshot
             }
 
             # Native quote on USER side.
@@ -1240,7 +1216,6 @@ def handle_all_messages(message):
             )
 
         return
-
 
     # ========================================================
     # USER -> ADMIN
@@ -1399,7 +1374,6 @@ def handle_all_messages(message):
 
         # Don't expose internal error details to user.
 
-
 # ============================================================
 # REACTION SYNCHRONIZATION
 # ============================================================
@@ -1427,7 +1401,6 @@ def _reaction_to_payload(reaction):
         pass
 
     return None
-
 
 def _mirror_reaction_to_other_side(
     source_chat_id,
@@ -1532,7 +1505,6 @@ def _mirror_reaction_to_other_side(
                 e
             )
 
-
 if hasattr(
     bot,
     "message_reaction_handler"
@@ -1548,7 +1520,7 @@ if hasattr(
         try:
 
             is_user = (
-                reaction.chat.id != ADMIN_ID
+                reaction.chat.id!= ADMIN_ID
             )
 
             new_reaction = (
@@ -1574,7 +1546,6 @@ if hasattr(
                 e
             )
 
-
 # ============================================================
 # EDIT SYNCHRONIZATION
 # ============================================================
@@ -1589,7 +1560,6 @@ def handle_edits(message):
     message_id = message.message_id
 
     data = load_data()
-
 
     # ========================================================
     # ADMIN EDIT
@@ -1626,7 +1596,6 @@ def handle_edits(message):
 
         return
 
-
     # ========================================================
     # USER EDIT
     # ========================================================
@@ -1659,7 +1628,6 @@ def handle_edits(message):
         except Exception:
             pass
 
-
 # ============================================================
 # START SERVICES
 # ============================================================
@@ -1688,7 +1656,6 @@ def start_services():
         timeout=30,
         long_polling_timeout=30
     )
-
 
 # ============================================================
 # MAIN
